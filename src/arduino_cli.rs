@@ -53,6 +53,7 @@ struct ListResult {
 
 pub async fn search_libraries(query: &str) -> Result<Vec<LibraryInfo>, String> {
     let mut cmd = Command::new("arduino-cli");
+    cmd.kill_on_drop(true);
     cmd.arg("lib").arg("search");
     if !query.is_empty() {
         cmd.arg(query);
@@ -81,6 +82,7 @@ pub async fn search_libraries(query: &str) -> Result<Vec<LibraryInfo>, String> {
 
 pub async fn list_installed_libraries() -> Result<Vec<LibraryInfo>, String> {
     let mut cmd = Command::new("arduino-cli");
+    cmd.kill_on_drop(true);
     cmd.arg("lib").arg("list").arg("--format").arg("json");
 
     let output = cmd.output().await.map_err(|e| e.to_string())?;
@@ -107,6 +109,7 @@ pub async fn list_installed_libraries() -> Result<Vec<LibraryInfo>, String> {
 
 pub async fn install_library(name: &str) -> Result<(), String> {
     let mut cmd = Command::new("arduino-cli");
+    cmd.kill_on_drop(true);
     cmd.arg("lib").arg("install").arg(name);
 
     let output = cmd.output().await.map_err(|e| e.to_string())?;
@@ -119,6 +122,7 @@ pub async fn install_library(name: &str) -> Result<(), String> {
 
 pub async fn uninstall_library(name: &str) -> Result<(), String> {
     let mut cmd = Command::new("arduino-cli");
+    cmd.kill_on_drop(true);
     cmd.arg("lib").arg("uninstall").arg(name);
 
     let output = cmd.output().await.map_err(|e| e.to_string())?;

@@ -1,8 +1,9 @@
 use crossterm::{
-    event::{self, Event as CEvent, KeyCode, KeyEventKind},
+    event::{self, Event as CEvent, KeyCode, KeyEventKind, EventStream},
     execute,
     terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
+use futures_util::{FutureExt, StreamExt};
 use ratatui::{
     Frame, Terminal,
     backend::CrosstermBackend,
@@ -110,24 +111,25 @@ async fn main() -> Result<(), Box<dyn Error>> {
         }
     });
 
-    // Event loop
-    let tick_rate = Duration::from_millis(200);
-    let tx_input = tx.clone();
-    tokio::spawn(async move {
-        loop {
-            if event::poll(tick_rate).unwrap() {
-                if let Ok(event) = event::read() {
-                    let _ = tx_input.send(AppEvent::Input(event)).await;
-                }
-            }
-            let _ = tx_input.send(AppEvent::Tick).await;
-        }
-    });
+    let mut reader = EventStream::new();
+    let mut tick = tokio::time::interval(Duration::from_millis(200));
 
     loop {
         terminal.draw(|f| draw_ui(f, &mut app))?;
 
-        if let Some(event) = rx.recv().await {
+        let event = tokio::select! {
+            _ = tick.tick() => Some(AppEvent::Tick),
+            maybe_event = reader.next().fuse() => {
+                match maybe_event {
+                    Some(Ok(event)) => Some(AppEvent::Input(event)),
+                    Some(Err(_)) => None,
+                    None => None,
+                }
+            }
+            maybe_app_event = rx.recv() => maybe_app_event,
+        };
+
+        if let Some(event) = event {
             match event {
                 AppEvent::Input(CEvent::Key(key)) => {
                     if key.kind == KeyEventKind::Press {
@@ -288,11 +290,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 }
                 AppEvent::Input(_) => {}
                 AppEvent::LibrariesLoaded(libs) => {
-                    // Update installed status if we did a search
-                    if !app.search_input.is_empty() {
-                        // A simplistic way to check if installed: fire another request to get installed
-                        // We will leave them as `is_installed: false` for search results for now to keep it fast
-                    }
                     app.libraries = libs;
                     app.list_state.select(if app.libraries.is_empty() {
                         None
@@ -322,6 +319,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 }
                 AppEvent::Tick => {}
             }
+        } else {
+            break;
         }
     }
 
